@@ -1,82 +1,109 @@
+<div align="center">
+
 # Audio Resource Grabber
+
+网页音频 URL 抓取工具：Bookmarklet 与 Chrome Extension 两种入口。
+
+Browser audio URL finder with both Bookmarklet and Chrome Extension entry points.
+
+![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4)
+![Bookmarklet](https://img.shields.io/badge/Mode-Bookmarklet-007f7a)
+![No Build](https://img.shields.io/badge/Build-none-555)
+![Dependencies](https://img.shields.io/badge/Dependencies-none-555)
 
 [中文](#中文) · [English](#english)
 
+</div>
+
+---
+
 ## 中文
 
-一个轻量的网页音频 URL 抓取工具。它不会解析网站后端，也不会绕过权限；它只在当前页面和浏览器已加载资源记录里，整理出可能可直接访问的音频文件或流媒体清单地址。
+Audio Resource Grabber 用来从当前网页中找出可能可直接访问的音频文件或流媒体清单 URL。它只整理浏览器已经拿到、页面已经暴露的信息，不破解 DRM，不绕过登录，不解析网站后端。
 
-项目提供两种入口：
+### 功能亮点
 
-- **Bookmarklet**：拖到书签栏即可用，不需要安装扩展。
-- **Chrome Extension**：Manifest V3 本地扩展，支持在弹窗里扫描并批量提交下载。
-
-### 什么时候用它
-
-- 你在网页上能播放音频，但想找到原始音频 URL。
-- 你只需要页面已经暴露给浏览器的资源地址。
-- 你的 Chrome 被公司策略限制，不能加载本地扩展时，可以改用 Bookmarklet。
+- **两种入口**：支持 Bookmarklet 和 Manifest V3 Chrome 扩展。
+- **无构建步骤**：直接打开 HTML 或加载扩展目录即可使用。
+- **无外部依赖**：项目没有 npm、Python 或其他包管理依赖。
+- **页面内扫描**：从 DOM 属性和浏览器已加载资源记录中收集候选 URL。
+- **下载辅助**：Bookmarklet 可复制、打开、下载候选 URL；扩展版可提交单个或全部下载任务。
 
 ### 快速开始
 
-#### Bookmarklet
+如果只是临时使用，优先试 Bookmarklet；如果希望在弹窗里扫描并批量下载，用 Chrome Extension。
+
+| 方式 | 适合场景 | 入口 |
+| --- | --- | --- |
+| Bookmarklet | 临时使用、不能安装扩展、公司浏览器受管 | `bookmarklet/bookmarklet.html` |
+| Chrome Extension | 弹窗扫描、单个下载、全部下载 | `chrome-extension/` |
+
+### Bookmarklet
 
 1. 打开 `bookmarklet/bookmarklet.html`。
-2. 把页面里的 `Audio Grabber` 链接拖到浏览器书签栏。
-3. 进入目标网页，先播放音频几秒。
+2. 把页面中的 `Audio Grabber` 链接拖到浏览器书签栏。
+3. 打开目标网页，先播放音频几秒。
 4. 点击书签栏里的 `Audio Grabber`。
 5. 在页面右下角面板中复制、打开或下载候选 URL。
 
-如果 bookmarklet 被浏览器策略拦截，可以在 `bookmarklet/bookmarklet.html` 里复制 Console 代码，然后粘贴到目标网页的 DevTools Console 运行。
+如果浏览器策略禁止 bookmarklet，可以在 `bookmarklet/bookmarklet.html` 中复制 Console 代码，然后粘贴到目标网页的 DevTools Console 运行。
 
-#### Chrome Extension
+### Chrome Extension
 
 1. 打开 `chrome://extensions`。
 2. 开启 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择 `chrome-extension/`。
-5. 进入目标网页，先播放音频几秒。
+4. 选择 `chrome-extension/` 目录。
+5. 打开目标网页，先播放音频几秒。
 6. 点击扩展按钮扫描当前标签页。
 
-扩展会通过 Chrome 下载管理器提交下载任务，文件默认进入下载目录下的 `audio-grabber/` 子目录。
+扩展版会通过 Chrome 下载管理器提交下载任务，文件默认进入下载目录下的 `audio-grabber/` 子目录。
 
-### 两种方案对比
+扩展声明的权限：
 
-| 方案 | 优点 | 注意事项 |
-| --- | --- | --- |
-| Bookmarklet | 不需要安装扩展；适合临时使用或受管浏览器 | 下载由页面内临时链接触发 |
-| Chrome Extension | 有弹窗界面；支持单个下载和全部下载 | 需要 Chrome 允许加载本地扩展 |
+| 权限 | 用途 |
+| --- | --- |
+| `activeTab` | 访问当前激活标签页 |
+| `scripting` | 向当前页面注入扫描函数 |
+| `downloads` | 提交下载任务 |
 
-### 能扫描什么
+### 扫描范围
 
-扫描范围来自当前页面可访问的信息：
+工具会从这些位置收集候选资源：
 
-- `<audio>`、`<video>` 的 `currentSrc` 和 `src`。
-- 媒体元素内部 `<source>` 的 `src` 和 `srcset`。
+- `<audio>` 和 `<video>` 的 `currentSrc`、`src`。
+- 媒体元素内部 `<source>` 的 `src`、`srcset`。
 - 页面元素上的 `src`、`href`、`data-src`、`data-url`、`data-href`、`srcset`。
-- `performance.getEntriesByType("resource")` 记录的已加载资源。
+- `performance.getEntriesByType("resource")` 中浏览器已经加载过的资源。
 
-支持识别的常见音频后缀：
+识别的常见音频后缀：
 
 ```text
 mp3, m4a, aac, wav, ogg, oga, opus, flac, weba, webm, aiff, aif, amr, mid, midi
 ```
 
-支持识别的流媒体清单：
+识别的流媒体清单：
 
 ```text
 m3u8, mpd
 ```
 
-### 不能做什么
+### 权限与隐私
 
-- 不能发现页面尚未加载或没有暴露给浏览器的资源。
-- 不处理 `blob:`、`data:` 这类非 `http(s)` 地址。
-- 不拼接 HLS/DASH 分片，只列出清单文件。
+- 扫描逻辑在当前页面内运行。
+- 项目代码中没有远程上传、统计上报或外部 API 请求逻辑。
+- 扩展版只使用 `activeTab`、`scripting`、`downloads` 三个权限。
+- 下载是否成功仍取决于浏览器和目标网站服务器响应。
+
+### 限制
+
+- 页面还没播放音频时，相关请求可能尚未出现；建议先播放几秒再扫描。
+- 只收集 `http` 和 `https` URL；不处理 `blob:`、`data:` 地址。
+- HLS/DASH 只列出 `.m3u8` 或 `.mpd` 清单，不拼接分片。
 - 不破解 DRM、不解密加密音频、不绕过登录或网站访问控制。
-- 跨域资源是否能下载，取决于浏览器和目标服务器响应。
+- 跨域下载、文件名保留等行为可能被浏览器或服务器策略影响。
 
-### 文件结构
+### 项目结构
 
 ```text
 .
@@ -91,9 +118,9 @@ m3u8, mpd
     └── popup.js
 ```
 
-### 本地检查
+### 本地校验
 
-项目没有构建步骤，也不需要安装依赖。
+项目没有构建步骤，也不需要安装依赖。修改代码后可以运行：
 
 ```sh
 cd bookmarklet
@@ -105,59 +132,66 @@ node --check background.js
 python3 -m json.tool manifest.json >/dev/null
 ```
 
+---
+
 ## English
 
-A lightweight tool for collecting audio URLs from a web page. It does not inspect server-side code or bypass permissions; it only organizes audio files and streaming manifest URLs that are already visible to the current page or recorded by the browser.
+Audio Resource Grabber finds audio file URLs and streaming manifest URLs that may be directly accessible from the current web page. It only organizes information that the browser has already loaded or the page has already exposed. It does not crack DRM, bypass login, or inspect server-side code.
 
-The project has two entry points:
+### Highlights
 
-- **Bookmarklet**: drag it to the bookmarks bar and run it without installing an extension.
-- **Chrome Extension**: a local Manifest V3 extension with popup scanning and bulk download submission.
-
-### When to Use It
-
-- You can play audio on a page and want to find the underlying audio URL.
-- You only need resource URLs that the page has already exposed to the browser.
-- Your managed Chrome browser blocks local extensions, so you need a bookmarklet fallback.
+- **Two entry points**: Bookmarklet and Manifest V3 Chrome extension.
+- **No build step**: open the HTML file or load the extension directory directly.
+- **No external dependencies**: no npm, Python, or other package dependencies.
+- **In-page scanning**: collects candidate URLs from DOM attributes and browser resource timing entries.
+- **Download helper**: the Bookmarklet can copy, open, or download candidates; the extension can submit one or all download tasks.
 
 ### Quick Start
 
-#### Bookmarklet
+Use the Bookmarklet for quick one-off scans. Use the Chrome Extension when you want popup scanning and bulk download submission.
+
+| Mode | Best for | Entry point |
+| --- | --- | --- |
+| Bookmarklet | Temporary use, no extension install, managed browsers | `bookmarklet/bookmarklet.html` |
+| Chrome Extension | Popup scanning, single download, bulk download | `chrome-extension/` |
+
+### Bookmarklet
 
 1. Open `bookmarklet/bookmarklet.html`.
 2. Drag the `Audio Grabber` link to your browser bookmarks bar.
 3. Open the target page and play the audio for a few seconds.
 4. Click `Audio Grabber` in the bookmarks bar.
-5. Copy, open, or download candidate URLs from the panel at the bottom-right of the page.
+5. Copy, open, or download candidate URLs from the bottom-right panel.
 
 If browser policy blocks bookmarklets, copy the Console snippet from `bookmarklet/bookmarklet.html` and run it in the target page's DevTools Console.
 
-#### Chrome Extension
+### Chrome Extension
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
-4. Select `chrome-extension/`.
+4. Select the `chrome-extension/` directory.
 5. Open the target page and play the audio for a few seconds.
 6. Click the extension button to scan the current tab.
 
 The extension submits downloads through Chrome's download manager. Files are saved under the `audio-grabber/` subdirectory in the default downloads folder.
 
-### Version Comparison
+Declared permissions:
 
-| Version | Strength | Notes |
-| --- | --- | --- |
-| Bookmarklet | No extension install; good for temporary use or managed browsers | Downloads are triggered by temporary in-page links |
-| Chrome Extension | Popup UI; supports single-item and bulk downloads | Requires Chrome to allow local extension loading |
+| Permission | Purpose |
+| --- | --- |
+| `activeTab` | Access the active tab |
+| `scripting` | Inject the scanner function into the current page |
+| `downloads` | Submit download tasks |
 
 ### What It Scans
 
-The scanner only uses information available from the current page:
+The tool collects candidate resources from:
 
 - `currentSrc` and `src` on `<audio>` and `<video>`.
 - `src` and `srcset` on `<source>` inside media elements.
 - `src`, `href`, `data-src`, `data-url`, `data-href`, and `srcset` attributes on page elements.
-- Loaded resource entries from `performance.getEntriesByType("resource")`.
+- Resources already loaded in `performance.getEntriesByType("resource")`.
 
 Common audio extensions:
 
@@ -171,15 +205,22 @@ Streaming manifests:
 m3u8, mpd
 ```
 
-### What It Does Not Do
+### Permissions and Privacy
 
-- It cannot discover resources that have not been loaded or exposed to the browser.
-- It does not handle non-`http(s)` URLs such as `blob:` or `data:`.
-- It does not stitch HLS/DASH media segments; it only lists manifest files.
-- It does not crack DRM, decrypt protected audio, bypass login, or bypass site access controls.
-- Cross-origin downloads depend on the browser and the target server response.
+- The scanner runs inside the current page.
+- The project code does not contain remote upload, analytics, telemetry, or external API request logic.
+- The extension only uses `activeTab`, `scripting`, and `downloads`.
+- Download success still depends on the browser and the target server response.
 
-### Project Layout
+### Limitations
+
+- If playback has not started, the related audio request may not exist yet; play the audio for a few seconds before scanning.
+- Only `http` and `https` URLs are collected; `blob:` and `data:` URLs are excluded.
+- HLS/DASH manifests are listed as `.m3u8` or `.mpd` files only. The tool does not stitch media segments.
+- The tool does not crack DRM, decrypt protected audio, bypass login, or bypass site access controls.
+- Cross-origin downloads and filename preservation may be affected by browser or server policy.
+
+### Project Structure
 
 ```text
 .
@@ -196,7 +237,7 @@ m3u8, mpd
 
 ### Local Checks
 
-The project has no build step and no installable dependencies.
+The project has no build step and no installable dependencies. After editing code, run:
 
 ```sh
 cd bookmarklet
