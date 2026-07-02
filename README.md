@@ -11,12 +11,12 @@
 
 入口文件：
 
-- `bookmarklet.html`
-- `bookmarklet-source.js`
+- `bookmarklet/bookmarklet.html`
+- `bookmarklet/bookmarklet-source.js`
 
 使用方式：
 
-1. 在浏览器打开 `bookmarklet.html`。
+1. 在浏览器打开 `bookmarklet/bookmarklet.html`。
 2. 显示书签栏。
 3. 把页面里的 `Audio Grabber` 链接拖到书签栏。
 4. 打开目标网页，先播放音频几秒。
@@ -30,24 +30,24 @@
 - 复制全部 URL。
 - 打开候选资源链接。
 
-如果浏览器禁止 bookmarklet，可以打开 `bookmarklet.html`，复制页面下方的 Console 代码，到目标网页的 DevTools Console 中运行。
+如果浏览器禁止 bookmarklet，可以打开 `bookmarklet/bookmarklet.html`，复制页面下方的 Console 代码，到目标网页的 DevTools Console 中运行。
 
 ## 方案二：Chrome Extension
 
 入口文件：
 
-- `manifest.json`
-- `popup.html`
-- `popup.css`
-- `popup.js`
-- `background.js`
+- `chrome-extension/manifest.json`
+- `chrome-extension/popup.html`
+- `chrome-extension/popup.css`
+- `chrome-extension/popup.js`
+- `chrome-extension/background.js`
 
 使用方式：
 
 1. 打开 `chrome://extensions`。
 2. 开启 Developer mode。
 3. 点击 Load unpacked。
-4. 选择本项目目录。
+4. 选择 `chrome-extension/` 目录。
 5. 打开目标网页，先播放音频几秒。
 6. 点击扩展按钮扫描资源。
 
@@ -94,7 +94,10 @@
 可以运行下面的命令检查主要文件语法：
 
 ```sh
+cd bookmarklet
 node --check bookmarklet-source.js
+
+cd ../chrome-extension
 node --check popup.js
 node --check background.js
 python3 -m json.tool manifest.json >/dev/null
