@@ -114,6 +114,10 @@ function setStatus(message, isError = false) {
 }
 
 function scanPageForAudioResources() {
+  if (performance.setResourceTimingBufferSize) {
+    performance.setResourceTimingBufferSize(5000);
+  }
+
   const audioExtensions = new Set([
     "mp3",
     "m4a",
@@ -132,6 +136,31 @@ function scanPageForAudioResources() {
     "midi"
   ]);
   const streamExtensions = new Set(["m3u8", "mpd"]);
+  const ignoredExtensions = new Set([
+    "css",
+    "html",
+    "htm",
+    "js",
+    "mjs",
+    "json",
+    "map",
+    "xml",
+    "txt",
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "avif",
+    "svg",
+    "ico",
+    "woff",
+    "woff2",
+    "ttf",
+    "otf"
+  ]);
+  const ignoredNetworkInitiators = new Set(["css", "script", "link", "img", "image", "beacon"]);
   const candidates = new Map();
 
   const addCandidate = (rawUrl, source, options = {}) => {
@@ -139,7 +168,7 @@ function scanPageForAudioResources() {
       return;
     }
 
-    const trimmedUrl = rawUrl.trim();
+    const trimmedUrl = normalizeCandidateUrl(rawUrl).trim();
     if (!trimmedUrl || trimmedUrl.startsWith("data:")) {
       return;
     }
@@ -157,26 +186,35 @@ function scanPageForAudioResources() {
 
     const url = parsed.href.split("#")[0];
     const extension = getExtension(parsed);
-    const lowerUrl = url.toLowerCase();
+    if (ignoredExtensions.has(extension)) {
+      return;
+    }
+
     const isAudioExtension = audioExtensions.has(extension);
     const isStreamExtension = streamExtensions.has(extension);
-    const hasAudioHint = /(?:audio|podcast|sound|media|listen|track|mp3|m4a|aac|wav|ogg|opus|flac|m3u8|mpd)/i.test(lowerUrl);
-    const strongSource = /^(audio|video|source|network:audio|network:video|srcset)/.test(source);
+    const hasAudioMime = /^(audio\/|application\/(?:ogg|dash\+xml|vnd\.apple\.mpegurl)|application\/x-mpegurl)/i.test(options.type || "");
+    const strongSource = /^(audio|video|audio:source|video:source|network:audio|network:video)/.test(source);
 
-    if (!isAudioExtension && !isStreamExtension && !hasAudioHint && !strongSource && !options.force) {
+    if (!isAudioExtension && !isStreamExtension && !hasAudioMime && !strongSource && !options.force) {
       return;
     }
 
     const filename = getFilename(parsed, extension, candidates.size + 1);
     const kind = isStreamExtension ? "stream manifest" : isAudioExtension ? "audio file" : "candidate";
-    const existing = candidates.get(url);
+    const dedupeKey = getDedupeKey(parsed, url, {
+      isAudioExtension,
+      isStreamExtension,
+      hasAudioMime,
+      strongSource
+    });
+    const existing = candidates.get(dedupeKey);
 
     if (existing) {
       existing.source = mergeSource(existing.source, source);
       return;
     }
 
-    candidates.set(url, {
+    candidates.set(dedupeKey, {
       url,
       filename,
       extension: extension || "unknown",
@@ -190,10 +228,14 @@ function scanPageForAudioResources() {
     addCandidate(element.getAttribute("src"), element.localName, { force: true });
   });
 
-  document.querySelectorAll("source").forEach((element) => {
-    addCandidate(element.src, "source", { force: true });
-    addCandidate(element.getAttribute("src"), "source", { force: true });
-    addSrcset(element.getAttribute("srcset"), "srcset");
+  document.querySelectorAll("audio source, video source").forEach((element) => {
+    const parentName = element.parentElement?.localName || "media";
+    const source = `${parentName}:source`;
+    const type = element.getAttribute("type") || "";
+
+    addCandidate(element.src, source, { force: true, type });
+    addCandidate(element.getAttribute("src"), source, { force: true, type });
+    addSrcset(element.getAttribute("srcset"), source);
   });
 
   document.querySelectorAll("[src], [href], [data-src], [data-url], [data-href], [srcset]").forEach((element) => {
@@ -203,7 +245,15 @@ function scanPageForAudioResources() {
     addSrcset(element.getAttribute("srcset"), "srcset");
   });
 
+  document.querySelectorAll("script").forEach((element) => {
+    addUrlsFromText(element.textContent || "", "script:text");
+  });
+
   performance.getEntriesByType("resource").forEach((entry) => {
+    if (ignoredNetworkInitiators.has(entry.initiatorType)) {
+      return;
+    }
+
     const source = `network:${entry.initiatorType || "resource"}`;
     addCandidate(entry.name, source, {
       force: entry.initiatorType === "audio" || entry.initiatorType === "video"
@@ -223,6 +273,17 @@ function scanPageForAudioResources() {
     srcset.split(",").forEach((part) => {
       addCandidate(part.trim().split(/\s+/)[0], source);
     });
+  }
+
+  function addUrlsFromText(text, source) {
+    if (!text) {
+      return;
+    }
+
+    const normalizedText = normalizeCandidateUrl(text);
+    const audioUrlPattern = /https?:\/\/[^\s"'<>`\\]+?\.(?:mp3|m4a|aac|wav|ogg|oga|opus|flac|weba|webm|aiff|aif|amr|mid|midi|m3u8|mpd)(?:\?[^"'<>`\s\\]*)?/gi;
+    const matches = normalizedText.match(audioUrlPattern) || [];
+    matches.forEach((url) => addCandidate(url, source));
   }
 
   function getExtension(parsed) {
@@ -252,6 +313,21 @@ function scanPageForAudioResources() {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 180);
+  }
+
+  function normalizeCandidateUrl(rawUrl) {
+    return String(rawUrl)
+      .replace(/\\u002f/gi, "/")
+      .replace(/\\\//g, "/")
+      .replace(/&amp;/g, "&");
+  }
+
+  function getDedupeKey(parsed, url, evidence) {
+    if (evidence.isAudioExtension || evidence.isStreamExtension || evidence.hasAudioMime || evidence.strongSource) {
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.toLowerCase();
+    }
+
+    return url;
   }
 
   function mergeSource(left, right) {

@@ -56,6 +56,10 @@ function audioGrabberBookmarklet() {
   renderPanel(items);
 
   function scanPage() {
+    if (performance.setResourceTimingBufferSize) {
+      performance.setResourceTimingBufferSize(5000);
+    }
+
     const candidates = new Map();
 
     const addCandidate = (rawUrl, source, options = {}) => {
@@ -63,7 +67,7 @@ function audioGrabberBookmarklet() {
         return;
       }
 
-      const trimmedUrl = rawUrl.trim();
+      const trimmedUrl = normalizeCandidateUrl(rawUrl).trim();
       if (!trimmedUrl || trimmedUrl.startsWith("data:")) {
         return;
       }
@@ -94,13 +98,19 @@ function audioGrabberBookmarklet() {
         return;
       }
 
-      const existing = candidates.get(url);
+      const dedupeKey = getDedupeKey(parsed, url, {
+        isAudioExtension,
+        isStreamExtension,
+        hasAudioMime,
+        strongSource
+      });
+      const existing = candidates.get(dedupeKey);
       if (existing) {
         existing.source = mergeSource(existing.source, source);
         return;
       }
 
-      candidates.set(url, {
+      candidates.set(dedupeKey, {
         url,
         filename: getFilename(parsed, extension, candidates.size + 1),
         extension: extension || "unknown",
@@ -131,6 +141,10 @@ function audioGrabberBookmarklet() {
       addSrcset(element.getAttribute("srcset"), "srcset");
     });
 
+    document.querySelectorAll("script").forEach((element) => {
+      addUrlsFromText(element.textContent || "", "script:text");
+    });
+
     performance.getEntriesByType("resource").forEach((entry) => {
       if (ignoredNetworkInitiators.has(entry.initiatorType)) {
         return;
@@ -153,10 +167,22 @@ function audioGrabberBookmarklet() {
         addCandidate(part.trim().split(/\s+/)[0], source);
       });
     }
+
+    function addUrlsFromText(text, source) {
+      if (!text) {
+        return;
+      }
+
+      const normalizedText = normalizeCandidateUrl(text);
+      const audioUrlPattern = /https?:\/\/[^\s"'<>`\\]+?\.(?:mp3|m4a|aac|wav|ogg|oga|opus|flac|weba|webm|aiff|aif|amr|mid|midi|m3u8|mpd)(?:\?[^"'<>`\s\\]*)?/gi;
+      const matches = normalizedText.match(audioUrlPattern) || [];
+      matches.forEach((url) => addCandidate(url, source));
+    }
   }
 
   function renderPanel(results) {
     ensureStyle();
+    let currentResults = results;
 
     const panel = document.createElement("section");
     panel.id = PANEL_ID;
@@ -169,6 +195,7 @@ function audioGrabberBookmarklet() {
           <span>${results.length} candidates</span>
         </div>
         <div class="ag-actions">
+          <button type="button" data-action="rescan">Rescan</button>
           <button type="button" data-action="copy-all">Copy all</button>
           <button type="button" data-action="close" aria-label="Close">x</button>
         </div>
@@ -178,16 +205,7 @@ function audioGrabberBookmarklet() {
     `;
 
     const list = panel.querySelector(".ag-list");
-    if (results.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "ag-empty";
-      empty.textContent = "No downloadable http(s) audio URLs were found.";
-      list.append(empty);
-    } else {
-      for (const item of results) {
-        list.append(createResultRow(item));
-      }
-    }
+    renderResultsList(list, currentResults);
 
     panel.addEventListener("click", async (event) => {
       const target = event.target;
@@ -200,23 +218,22 @@ function audioGrabberBookmarklet() {
         panel.remove();
       }
 
+      if (action === "rescan") {
+        currentResults = scanPage();
+        panel.querySelector(".ag-header span").textContent = `${currentResults.length} candidates`;
+        renderResultsList(list, currentResults);
+        target.textContent = "Scanned";
+        setTimeout(() => {
+          target.textContent = "Rescan";
+        }, 1200);
+      }
+
       if (action === "copy-all") {
-        await copyText(results.map((item) => item.url).join("\n"));
+        await copyText(currentResults.map((item) => item.url).join("\n"));
         target.textContent = "Copied";
         setTimeout(() => {
           target.textContent = "Copy all";
         }, 1200);
-      }
-
-      if (action === "copy-one") {
-        const url = target.closest(".ag-row")?.getAttribute("data-url");
-        if (url) {
-          await copyText(url);
-          target.textContent = "Copied";
-          setTimeout(() => {
-            target.textContent = "Copy";
-          }, 1200);
-        }
       }
 
       if (action === "download-one") {
@@ -236,6 +253,21 @@ function audioGrabberBookmarklet() {
     document.documentElement.append(panel);
   }
 
+  function renderResultsList(list, results) {
+    list.replaceChildren();
+
+    if (results.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "ag-empty";
+      empty.textContent = "No downloadable http(s) audio URLs were found.";
+      list.append(empty);
+    } else {
+      for (const item of results) {
+        list.append(createResultRow(item));
+      }
+    }
+  }
+
   function createResultRow(item) {
     const row = document.createElement("article");
     row.className = "ag-row";
@@ -246,12 +278,11 @@ function audioGrabberBookmarklet() {
     title.className = "ag-title";
     title.textContent = item.filename;
 
-    const meta = document.createElement("div");
-    meta.className = "ag-meta";
-    meta.textContent = [item.kind, item.extension, item.source].filter(Boolean).join(" · ");
-
-    const url = document.createElement("div");
+    const url = document.createElement("a");
     url.className = "ag-url";
+    url.href = item.url;
+    url.target = "_blank";
+    url.rel = "noreferrer";
     url.textContent = item.url;
 
     const actions = document.createElement("div");
@@ -262,19 +293,8 @@ function audioGrabberBookmarklet() {
     downloadButton.setAttribute("data-action", "download-one");
     downloadButton.textContent = "Download";
 
-    const openLink = document.createElement("a");
-    openLink.href = item.url;
-    openLink.target = "_blank";
-    openLink.rel = "noreferrer";
-    openLink.textContent = "Open";
-
-    const copyButton = document.createElement("button");
-    copyButton.type = "button";
-    copyButton.setAttribute("data-action", "copy-one");
-    copyButton.textContent = "Copy";
-
-    actions.append(downloadButton, openLink, copyButton);
-    row.append(title, meta, url, actions);
+    actions.append(downloadButton);
+    row.append(title, url, actions);
     return row;
   }
 
@@ -309,8 +329,7 @@ function audioGrabberBookmarklet() {
         box-sizing: border-box;
       }
 
-      #${PANEL_ID} .ag-header,
-      #${PANEL_ID} .ag-row-actions {
+      #${PANEL_ID} .ag-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -325,7 +344,6 @@ function audioGrabberBookmarklet() {
 
       #${PANEL_ID} .ag-header span,
       #${PANEL_ID} .ag-note,
-      #${PANEL_ID} .ag-meta,
       #${PANEL_ID} .ag-url {
         color: #68604f;
       }
@@ -336,7 +354,8 @@ function audioGrabberBookmarklet() {
       }
 
       #${PANEL_ID} button,
-      #${PANEL_ID} a {
+      #${PANEL_ID} .ag-actions a,
+      #${PANEL_ID} .ag-row-actions a {
         min-height: 30px;
         display: inline-flex;
         align-items: center;
@@ -363,7 +382,7 @@ function audioGrabberBookmarklet() {
 
       #${PANEL_ID} .ag-list {
         display: grid;
-        gap: 8px;
+        gap: 6px;
         overflow: auto;
         padding-right: 2px;
       }
@@ -371,27 +390,70 @@ function audioGrabberBookmarklet() {
       #${PANEL_ID} .ag-row,
       #${PANEL_ID} .ag-empty {
         display: grid;
-        gap: 5px;
-        padding: 10px;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        grid-template-areas:
+          "title actions"
+          "url url";
+        column-gap: 10px;
+        row-gap: 3px;
+        align-items: start;
+        padding: 8px 9px;
         background: #f6f1e8;
         border: 1px solid #d7cbb7;
         border-radius: 8px;
       }
 
+      #${PANEL_ID} .ag-empty {
+        display: block;
+      }
+
       #${PANEL_ID} .ag-title {
+        grid-area: title;
         font-weight: 700;
+        line-height: 1.25;
         overflow-wrap: anywhere;
       }
 
-      #${PANEL_ID} .ag-meta {
-        font-size: 12px;
-      }
-
       #${PANEL_ID} .ag-url {
+        grid-area: url;
+        display: block;
+        min-height: 0;
+        width: 100%;
+        padding: 0;
+        color: #68604f;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         font-size: 11px;
+        line-height: 1.25;
+        max-width: 100%;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      #${PANEL_ID} .ag-url:hover {
+        color: #007f7a;
+        text-decoration: underline;
+      }
+
+      #${PANEL_ID} .ag-row-actions {
+        grid-area: actions;
+        align-self: start;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 5px;
+        white-space: nowrap;
+      }
+
+      #${PANEL_ID} .ag-row-actions button {
+        min-height: 24px;
+        padding: 0 7px;
+        font-size: 11px;
+        line-height: 1;
       }
     `;
     document.documentElement.append(style);
@@ -440,6 +502,21 @@ function audioGrabberBookmarklet() {
     }
 
     return "";
+  }
+
+  function normalizeCandidateUrl(rawUrl) {
+    return String(rawUrl)
+      .replace(/\\u002f/gi, "/")
+      .replace(/\\\//g, "/")
+      .replace(/&amp;/g, "&");
+  }
+
+  function getDedupeKey(parsed, url, evidence) {
+    if (evidence.isAudioExtension || evidence.isStreamExtension || evidence.hasAudioMime || evidence.strongSource) {
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.toLowerCase();
+    }
+
+    return url;
   }
 
   function getFilename(parsed, extension, index) {

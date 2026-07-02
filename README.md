@@ -44,7 +44,8 @@ Audio Resource Grabber 用来从当前网页中找出可能可直接访问的音
 2. 把页面中的 `Audio Grabber` 链接拖到浏览器书签栏。
 3. 打开目标网页，先播放音频几秒。
 4. 点击书签栏里的 `Audio Grabber`。
-5. 在页面右下角面板中复制、打开或下载候选 URL。
+5. 在页面右下角面板中下载候选资源，或点击 URL 在新标签页打开。
+6. 如果音频请求在面板打开后才出现，点击面板里的 **Rescan**。
 
 如果浏览器策略禁止 bookmarklet，可以在 `bookmarklet/bookmarklet.html` 中复制 Console 代码，然后粘贴到目标网页的 DevTools Console 运行。
 
@@ -74,6 +75,7 @@ Audio Resource Grabber 用来从当前网页中找出可能可直接访问的音
 - `<audio>` 和 `<video>` 的 `currentSrc`、`src`。
 - 媒体元素内部 `<source>` 的 `src`、`srcset`。
 - 页面元素上的 `src`、`href`、`data-src`、`data-url`、`data-href`、`srcset`。
+- 页面脚本中直接出现的音频 URL，包括 `https:\/\/...` 这类转义写法。
 - `performance.getEntriesByType("resource")` 中浏览器已经加载过的资源。
 
 识别的常见音频后缀：
@@ -162,7 +164,8 @@ Use the Bookmarklet for quick one-off scans. Use the Chrome Extension when you w
 2. Drag the `Audio Grabber` link to your browser bookmarks bar.
 3. Open the target page and play the audio for a few seconds.
 4. Click `Audio Grabber` in the bookmarks bar.
-5. Copy, open, or download candidate URLs from the bottom-right panel.
+5. Download candidates from the bottom-right panel, or click a URL to open it in a new tab.
+6. If the audio request appears after the panel opens, click **Rescan** in the panel.
 
 If browser policy blocks bookmarklets, copy the Console snippet from `bookmarklet/bookmarklet.html` and run it in the target page's DevTools Console.
 
@@ -192,6 +195,7 @@ The tool collects candidate resources from:
 - `currentSrc` and `src` on `<audio>` and `<video>`.
 - `src` and `srcset` on `<source>` inside media elements.
 - `src`, `href`, `data-src`, `data-url`, `data-href`, and `srcset` attributes on page elements.
+- Audio URLs embedded in page scripts, including escaped forms such as `https:\/\/...`.
 - Resources already loaded in `performance.getEntriesByType("resource")`.
 
 Common audio extensions:
