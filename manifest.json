@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Audio Resource Grabber",
+  "version": "0.1.0",
+  "description": "Find downloadable audio resources on the current tab.",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Find audio files"
+  }
+}
