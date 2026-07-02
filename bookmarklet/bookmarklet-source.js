@@ -85,14 +85,12 @@ function audioGrabberBookmarklet() {
         return;
       }
 
-      const lowerUrl = url.toLowerCase();
       const isAudioExtension = audioExtensions.has(extension);
       const isStreamExtension = streamExtensions.has(extension);
-      const hasAudioHint = /(?:audio|podcast|sound|listen|mp3|m4a|aac|wav|ogg|opus|flac|m3u8|mpd)/i.test(lowerUrl);
       const hasAudioMime = /^(audio\/|application\/(?:ogg|dash\+xml|vnd\.apple\.mpegurl)|application\/x-mpegurl)/i.test(options.type || "");
       const strongSource = /^(audio|video|audio:source|video:source|network:audio|network:video)/.test(source);
 
-      if (!isAudioExtension && !isStreamExtension && !hasAudioMime && !hasAudioHint && !strongSource && !options.force) {
+      if (!isAudioExtension && !isStreamExtension && !hasAudioMime && !strongSource && !options.force) {
         return;
       }
 

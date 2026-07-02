@@ -99,6 +99,7 @@ m3u8, mpd
 
 - 页面还没播放音频时，相关请求可能尚未出现；建议先播放几秒再扫描。
 - 只收集 `http` 和 `https` URL；不处理 `blob:`、`data:` 地址。
+- CSS、HTML、JS、图片、字体等非音频资源会按后缀和加载来源过滤掉。
 - HLS/DASH 只列出 `.m3u8` 或 `.mpd` 清单，不拼接分片。
 - 不破解 DRM、不解密加密音频、不绕过登录或网站访问控制。
 - 跨域下载、文件名保留等行为可能被浏览器或服务器策略影响。
@@ -216,6 +217,7 @@ m3u8, mpd
 
 - If playback has not started, the related audio request may not exist yet; play the audio for a few seconds before scanning.
 - Only `http` and `https` URLs are collected; `blob:` and `data:` URLs are excluded.
+- CSS, HTML, JavaScript, images, fonts, and other non-audio resources are filtered by extension and initiator type.
 - HLS/DASH manifests are listed as `.m3u8` or `.mpd` files only. The tool does not stitch media segments.
 - The tool does not crack DRM, decrypt protected audio, bypass login, or bypass site access controls.
 - Cross-origin downloads and filename preservation may be affected by browser or server policy.
