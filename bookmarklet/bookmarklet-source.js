@@ -26,6 +26,31 @@ function audioGrabberBookmarklet() {
     "midi"
   ]);
   const streamExtensions = new Set(["m3u8", "mpd"]);
+  const ignoredExtensions = new Set([
+    "css",
+    "html",
+    "htm",
+    "js",
+    "mjs",
+    "json",
+    "map",
+    "xml",
+    "txt",
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "avif",
+    "svg",
+    "ico",
+    "woff",
+    "woff2",
+    "ttf",
+    "otf"
+  ]);
+  const ignoredNetworkInitiators = new Set(["css", "script", "link", "img", "image", "beacon"]);
 
   const items = scanPage();
   renderPanel(items);
@@ -56,13 +81,18 @@ function audioGrabberBookmarklet() {
 
       const url = parsed.href.split("#")[0];
       const extension = getExtension(parsed);
+      if (ignoredExtensions.has(extension)) {
+        return;
+      }
+
       const lowerUrl = url.toLowerCase();
       const isAudioExtension = audioExtensions.has(extension);
       const isStreamExtension = streamExtensions.has(extension);
-      const hasAudioHint = /(?:audio|podcast|sound|media|listen|track|mp3|m4a|aac|wav|ogg|opus|flac|m3u8|mpd)/i.test(lowerUrl);
-      const strongSource = /^(audio|video|source|network:audio|network:video|srcset)/.test(source);
+      const hasAudioHint = /(?:audio|podcast|sound|listen|mp3|m4a|aac|wav|ogg|opus|flac|m3u8|mpd)/i.test(lowerUrl);
+      const hasAudioMime = /^(audio\/|application\/(?:ogg|dash\+xml|vnd\.apple\.mpegurl)|application\/x-mpegurl)/i.test(options.type || "");
+      const strongSource = /^(audio|video|audio:source|video:source|network:audio|network:video)/.test(source);
 
-      if (!isAudioExtension && !isStreamExtension && !hasAudioHint && !strongSource && !options.force) {
+      if (!isAudioExtension && !isStreamExtension && !hasAudioMime && !hasAudioHint && !strongSource && !options.force) {
         return;
       }
 
@@ -86,10 +116,14 @@ function audioGrabberBookmarklet() {
       addCandidate(element.getAttribute("src"), element.localName, { force: true });
     });
 
-    document.querySelectorAll("source").forEach((element) => {
-      addCandidate(element.src, "source", { force: true });
-      addCandidate(element.getAttribute("src"), "source", { force: true });
-      addSrcset(element.getAttribute("srcset"), "srcset");
+    document.querySelectorAll("audio source, video source").forEach((element) => {
+      const parentName = element.parentElement?.localName || "media";
+      const source = `${parentName}:source`;
+      const type = element.getAttribute("type") || "";
+
+      addCandidate(element.src, source, { force: true, type });
+      addCandidate(element.getAttribute("src"), source, { force: true, type });
+      addSrcset(element.getAttribute("srcset"), source);
     });
 
     document.querySelectorAll("[src], [href], [data-src], [data-url], [data-href], [srcset]").forEach((element) => {
@@ -100,6 +134,10 @@ function audioGrabberBookmarklet() {
     });
 
     performance.getEntriesByType("resource").forEach((entry) => {
+      if (ignoredNetworkInitiators.has(entry.initiatorType)) {
+        return;
+      }
+
       const source = `network:${entry.initiatorType || "resource"}`;
       addCandidate(entry.name, source, {
         force: entry.initiatorType === "audio" || entry.initiatorType === "video"
@@ -182,6 +220,19 @@ function audioGrabberBookmarklet() {
           }, 1200);
         }
       }
+
+      if (action === "download-one") {
+        const row = target.closest(".ag-row");
+        const url = row?.getAttribute("data-url");
+        const filename = row?.getAttribute("data-filename") || "";
+        if (url) {
+          triggerDownload(url, filename);
+          target.textContent = "Started";
+          setTimeout(() => {
+            target.textContent = "Download";
+          }, 1200);
+        }
+      }
     });
 
     document.documentElement.append(panel);
@@ -191,6 +242,7 @@ function audioGrabberBookmarklet() {
     const row = document.createElement("article");
     row.className = "ag-row";
     row.setAttribute("data-url", item.url);
+    row.setAttribute("data-filename", item.filename);
 
     const title = document.createElement("div");
     title.className = "ag-title";
@@ -207,9 +259,13 @@ function audioGrabberBookmarklet() {
     const actions = document.createElement("div");
     actions.className = "ag-row-actions";
 
+    const downloadButton = document.createElement("button");
+    downloadButton.type = "button";
+    downloadButton.setAttribute("data-action", "download-one");
+    downloadButton.textContent = "Download";
+
     const openLink = document.createElement("a");
     openLink.href = item.url;
-    openLink.download = item.filename;
     openLink.target = "_blank";
     openLink.rel = "noreferrer";
     openLink.textContent = "Open";
@@ -219,7 +275,7 @@ function audioGrabberBookmarklet() {
     copyButton.setAttribute("data-action", "copy-one");
     copyButton.textContent = "Copy";
 
-    actions.append(openLink, copyButton);
+    actions.append(downloadButton, openLink, copyButton);
     row.append(title, meta, url, actions);
     return row;
   }
@@ -357,6 +413,18 @@ function audioGrabberBookmarklet() {
     textarea.select();
     document.execCommand("copy");
     textarea.remove();
+  }
+
+  function triggerDownload(url, filename) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename || "";
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.style.display = "none";
+    document.body.append(link);
+    link.click();
+    link.remove();
   }
 
   function getExtension(parsed) {
