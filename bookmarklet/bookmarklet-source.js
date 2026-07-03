@@ -1,6 +1,7 @@
 function audioGrabberBookmarklet() {
   const PANEL_ID = "audio-grabber-bookmarklet-panel";
   const STYLE_ID = "audio-grabber-bookmarklet-style";
+  const STORAGE_KEY = "audio-grabber-bookmarklet-items";
 
   const existingPanel = document.getElementById(PANEL_ID);
   if (existingPanel) {
@@ -52,7 +53,8 @@ function audioGrabberBookmarklet() {
   ]);
   const ignoredNetworkInitiators = new Set(["css", "script", "link", "img", "image", "beacon"]);
 
-  const items = scanPage();
+  const items = mergeResults(loadStoredItems(), scanPage());
+  saveStoredItems(items);
   renderPanel(items);
 
   function scanPage() {
@@ -196,6 +198,7 @@ function audioGrabberBookmarklet() {
         </div>
         <div class="ag-actions">
           <button type="button" data-action="rescan">Rescan</button>
+          <button type="button" data-action="clear-all">Clear all</button>
           <button type="button" data-action="copy-all">Copy all</button>
           <button type="button" data-action="close" aria-label="Close">x</button>
         </div>
@@ -219,12 +222,24 @@ function audioGrabberBookmarklet() {
       }
 
       if (action === "rescan") {
-        currentResults = scanPage();
-        panel.querySelector(".ag-header span").textContent = `${currentResults.length} candidates`;
+        currentResults = mergeResults(currentResults, scanPage());
+        saveStoredItems(currentResults);
+        updateCount();
         renderResultsList(list, currentResults);
         target.textContent = "Scanned";
         setTimeout(() => {
           target.textContent = "Rescan";
+        }, 1200);
+      }
+
+      if (action === "clear-all") {
+        currentResults = [];
+        clearStoredItems();
+        updateCount();
+        renderResultsList(list, currentResults);
+        target.textContent = "Cleared";
+        setTimeout(() => {
+          target.textContent = "Clear all";
         }, 1200);
       }
 
@@ -251,6 +266,79 @@ function audioGrabberBookmarklet() {
     });
 
     document.documentElement.append(panel);
+
+    function updateCount() {
+      panel.querySelector(".ag-header span").textContent = `${currentResults.length} candidates`;
+    }
+  }
+
+  function loadStoredItems() {
+    try {
+      const storedItems = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
+      if (!Array.isArray(storedItems)) {
+        return [];
+      }
+
+      return storedItems
+        .filter((item) => item && typeof item.url === "string")
+        .map(normalizeStoredItem);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function saveStoredItems(items) {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.map(normalizeStoredItem)));
+    } catch (_error) {
+      // Some pages disable localStorage; keep the in-memory panel usable.
+    }
+  }
+
+  function clearStoredItems() {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch (_error) {
+      // Some pages disable localStorage; clearing the in-memory list is still useful.
+    }
+  }
+
+  function mergeResults(leftItems, rightItems) {
+    const merged = new Map();
+
+    const addItem = (item) => {
+      const normalizedItem = normalizeStoredItem(item);
+      if (!normalizedItem.url) {
+        return;
+      }
+
+      const key = normalizedItem.url;
+      const existing = merged.get(key);
+      if (existing) {
+        existing.source = mergeSource(existing.source, normalizedItem.source);
+        existing.filename = existing.filename || normalizedItem.filename;
+        existing.extension = existing.extension === "unknown" ? normalizedItem.extension : existing.extension;
+        existing.kind = existing.kind === "candidate" ? normalizedItem.kind : existing.kind;
+        return;
+      }
+
+      merged.set(key, normalizedItem);
+    };
+
+    leftItems.forEach(addItem);
+    rightItems.forEach(addItem);
+
+    return Array.from(merged.values()).sort(sortCandidates);
+  }
+
+  function normalizeStoredItem(item) {
+    return {
+      url: typeof item.url === "string" ? item.url : "",
+      filename: typeof item.filename === "string" && item.filename ? item.filename : "untitled-audio",
+      extension: typeof item.extension === "string" && item.extension ? item.extension : "unknown",
+      kind: typeof item.kind === "string" && item.kind ? item.kind : "candidate",
+      source: typeof item.source === "string" && item.source ? item.source : "stored"
+    };
   }
 
   function renderResultsList(list, results) {
